@@ -7,7 +7,31 @@ from ultralytics.yolo.engine.predictor import BasePredictor
 from ultralytics.yolo.utils import DEFAULT_CONFIG, ROOT, ops
 from ultralytics.yolo.utils.checks import check_imgsz
 from ultralytics.yolo.utils.plotting import Annotator, colors, save_one_box
+import easyocr
 
+import cv2
+reader = easyocr.Reader(['en'], gpu=True)
+def ocr_image(img,coordinates):
+    x,y,w, h = int(coordinates[0]), int(coordinates[1]), int(coordinates[2]),int(coordinates[3])
+    img = img[y:h,x:w]
+
+    gray = cv2.cvtColor(img , cv2.COLOR_RGB2GRAY)
+    #gray = cv2.resize(gray, None, fx = 3, fy = 3, interpolation = cv2.INTER_CUBIC)
+    result = reader.readtext(gray)
+    text = ""
+    conf = 0.0
+
+    for res in result:
+        if len(result) == 1:
+            text = res[1]
+            conf = res[2]
+        if len(result) >1 and len(res[1])>6 and res[2]> 0.2:
+            text = res[1]
+            conf = res[2]
+    #     text += res[1] + " "
+    
+    #return str(text)
+    return str(text), float(conf)
 
 class DetectionPredictor(BasePredictor):
 
@@ -59,6 +83,7 @@ class DetectionPredictor(BasePredictor):
         for c in det[:, 5].unique():
             n = (det[:, 5] == c).sum()  # detections per class
             log_string += f"{n} {self.model.names[int(c)]}{'s' * (n > 1)}, "
+            #log_string += f"\nDetected: {text_ocr} | YOLO: {conf:.2f}, OCR: {ocr_conf:.2f}"
         # write
         gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
         for *xyxy, conf, cls in reversed(det):
@@ -72,6 +97,10 @@ class DetectionPredictor(BasePredictor):
                 c = int(cls)  # integer class
                 label = None if self.args.hide_labels else (
                     self.model.names[c] if self.args.hide_conf else f'{self.model.names[c]} {conf:.2f}')
+                text_ocr, ocr_conf = ocr_image(im0,xyxy)
+                #text_ocr = ocr_image(im0, xyxy)
+                label = f'{text_ocr} | YOLO: {conf:.2f}, OCR: {ocr_conf:.2f}'
+                #label = text_ocr
                 self.annotator.box_label(xyxy, label, color=colors(c, True))
             if self.args.save_crop:
                 imc = im0.copy()
@@ -79,7 +108,11 @@ class DetectionPredictor(BasePredictor):
                              imc,
                              file=self.save_dir / 'crops' / self.model.model.names[c] / f'{self.data_path.stem}.jpg',
                              BGR=True)
-
+        #if self.args.show:
+        #    cv2.imshow('YOLOv8 Live Detection', im0)
+        #    if cv2.waitKey(1) & 0xFF == ord('q'):
+        #        raise StopIteration  # gracefully stop if 'q' is pressed
+            
         return log_string
 
 

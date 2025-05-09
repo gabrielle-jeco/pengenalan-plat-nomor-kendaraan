@@ -69,6 +69,7 @@ class BasePredictor:
             config (str, optional): Path to a configuration file. Defaults to DEFAULT_CONFIG.
             overrides (dict, optional): Configuration overrides. Defaults to None.
         """
+        self.frame_count = 0
         if overrides is None:
             overrides = {}
         self.args = get_config(config, overrides)
@@ -99,7 +100,21 @@ class BasePredictor:
         raise NotImplementedError("get_annotator function needs to be implemented")
 
     def write_results(self, pred, batch, print_string):
-        raise NotImplementedError("print_results function needs to be implemented")
+        self.frame_count += 1  # <--- increment frame counter
+
+        # Skip drawing if not the N-th frame
+        if self.frame_count % 5 != 0:  # change 5 to any number you want (e.g., update only every 5 frames)
+            return  # skip the rest of this function (no drawing, no displaying)
+
+        # Get only the box with the highest confidence
+        if pred is not None and len(pred) > 0:
+            best_idx = pred.conf.argmax()
+            if pred.conf[best_idx] > 0.75:  # only update if high confidence
+                pred = pred[best_idx:best_idx + 1]
+            else:
+                return  # if confidence too low, skip updating
+
+        pass
 
     def postprocess(self, preds, img, orig_img):
         return preds
